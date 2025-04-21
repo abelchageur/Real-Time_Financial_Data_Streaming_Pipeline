@@ -96,12 +96,5 @@ Avant de commencer, assurez-vous que les composants suivants sont installés et 
 
 ## Auteurs
 
-- **Nom de l'Auteur** : [Votre nom ici]
+- **Nom de l'Auteur** : Mohamed Abelchaguer
 - **Organisation** : FinTech Solutions
-
----
-
-## Licence
-
-Ce projet est sous licence [Nom de la licence]. Vous pouvez consulter les termes de la licence dans le fichier LICENSE.
-
