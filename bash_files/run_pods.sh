@@ -1,12 +1,13 @@
-kubectl logs $(kubectl get pods -l app=sparkstreaming -o name)
-kubectl exec -it $(kubectl get pods -l app=spark-master -o name) -- /bin/bash
-docker build --no-cache -t fintech/spark-streaming:latest ./spark
-docker build --no-cache -t fintech/spark-streaming:latest ./streamlit
-docker build --no-cache -t fintech/streamlit:latest ./streamlit
-kubectl delete -f deployments/data-processing-deployments.yaml
-kubectl delete -f deployments/spark-deployments.yaml 
-kubectl apply -f deployments/data-processing-deployments.yaml
-kubectl apply -f deployments/spark-deployments.yaml 
+# /bin/bash
+# kubectl logs $(kubectl get pods -l app=sparkstreaming -o name)
+# kubectl exec -it $(kubectl get pods -l app=spark-master -o name) -- /bin/bash
+# docker build --no-cache -t fintech/spark-streaming:latest ./spark
+# docker build --no-cache -t fintech/spark-streaming:latest ./streamlit
+# docker build --no-cache -t fintech/streamlit:latest ./streamlit
+# kubectl delete -f deployments/data-processing-deployments.yaml
+# kubectl delete -f deployments/spark-deployments.yaml 
+# kubectl apply -f deployments/data-processing-deployments.yaml
+# kubectl apply -f deployments/spark-deployments.yaml 
 
 
 
