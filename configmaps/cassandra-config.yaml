@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cassandra-config
+data:
+  cassandra-setup.cql: |
+    CREATE KEYSPACE IF NOT EXISTS fintech
+    WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
+
+    CREATE TABLE IF NOT EXISTS fintech.raw_financial_data (
+        symbol text,
+        timestamp timestamp,
+        price decimal,
+        volume bigint,
+        PRIMARY KEY (symbol, timestamp)
+    ) WITH CLUSTERING ORDER BY (timestamp DESC);
+
+    CREATE TABLE IF NOT EXISTS fintech.aggregated_financial_data (
+        symbol text,
+        window_start timestamp,
+        window_end timestamp,
+        avg_price decimal,
+        total_volume bigint,
+        price_change decimal,
+        PRIMARY KEY ((symbol), window_start)
+    ) WITH CLUSTERING ORDER BY (window_start DESC);

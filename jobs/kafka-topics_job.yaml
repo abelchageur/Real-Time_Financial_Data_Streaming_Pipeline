@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-setup
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox
+        command: ["sh", "-c", "for i in {1..60}; do if nc -z kafka 9092; then echo 'Kafka ready'; exit 0; fi; echo 'Waiting for Kafka...'; sleep 5; done; echo 'Timeout waiting for Kafka'; exit 1"]
+      containers:
+      - name: kafka-setup
+        image: bitnami/kafka:3.7
+        command: ["/bin/bash", "/scripts/kafka-setup-k8s.sh"]
+        volumeMounts:
+        - name: kafka-config
+          mountPath: /scripts/kafka-setup-k8s.sh
+          subPath: kafka-setup-k8s.sh
+      restartPolicy: OnFailure
+      volumes:
+      - name: kafka-config
+        configMap:
+          name: kafka-config
+          defaultMode: 0755

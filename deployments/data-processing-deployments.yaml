@@ -1,0 +1,254 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-master
+  template:
+    metadata:
+      labels:
+        app: spark-master
+    spec:
+      containers:
+      - name: spark-master
+        image: bitnami/spark:3.5
+        ports:
+        - containerPort: 7077
+          name: master
+        - containerPort: 8080
+          name: webui
+        - containerPort: 8081
+          name: worker-ui
+        env:
+        - name: SPARK_LOCAL_IP
+          value: "0.0.0.0"
+        - name: SPARK_MASTER_PORT
+          value: "7077"
+        - name: SPARK_MASTER_WEBUI_PORT
+          value: "8080"
+        - name: SPARK_WORKER_WEBUI_PORT
+          value: "8081"
+        - name: SPARK_MODE
+          value: "master"  # Run as master
+        - name: SPARK_MASTER_OPTS
+          value: "-Dspark.deploy.defaultCores=2 -Dlog4j.configuration=file:/opt/bitnami/spark/conf/log4j.properties"
+        - name: SPARK_WORKER_CORES
+          value: "2"
+        - name: SPARK_WORKER_MEMORY
+          value: "2G"
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          mkdir -p /opt/bitnami/spark/logs && chmod 777 /opt/bitnami/spark/logs
+          # Start both master and worker
+          /opt/bitnami/spark/sbin/start-master.sh
+          /opt/bitnami/spark/sbin/start-worker.sh spark://localhost:7077 &
+          # Wait for services
+          for i in {1..60}; do
+            if nc -z localhost 7077 && nc -z localhost 8081; then
+              echo "Spark services ready"
+              break
+            fi
+            echo "Waiting for Spark services..."
+            sleep 5
+          done
+          tail -f /opt/bitnami/spark/logs/*.out || true
+        resources:
+          limits:
+            cpu: "2"      # Increased for combined workload
+            memory: "4Gi" # Increased for combined workload
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+        volumeMounts:
+        - name: executor-logs
+          mountPath: "/opt/bitnami/spark/logs"
+        - name: log4j-config
+          mountPath: /opt/bitnami/spark/conf/log4j.properties
+          subPath: log4j.properties
+      volumes:
+      - name: executor-logs
+        emptyDir: {}
+      - name: log4j-config
+        configMap:
+          name: spark-log4j-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-streaming
+  labels:
+    app: spark-streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-streaming
+  template:
+    metadata:
+      labels:
+        app: spark-streaming
+    spec:
+      containers:
+      - name: spark-streaming
+        image: fintech/spark-streaming:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+        env:
+        - name: SPARK_MASTER_URL
+          value: "spark://spark-master:7077"
+        - name: SPARK_EXECUTOR_CORES
+          value: "1"
+        - name: SPARK_EXECUTOR_MEMORY
+          value: "1g"
+        - name: SPARK_DRIVER_MEMORY
+          value: "1g"
+        - name: SPARK_CASSANDRA_CONNECTION_HOST
+          value: "cassandra"
+        - name: SPARK_CASSANDRA_CONNECTION_PORT
+          value: "9042"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          # Ensure logs directory exists
+          mkdir -p /opt/bitnami/spark/logs && chmod 777 /opt/bitnami/spark/logs
+          /opt/bitnami/spark/bin/spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.datastax.spark:spark-cassandra-connector_2.12:3.4.0 --master local[*] streaming_job.py
+        volumeMounts:
+        - name: log4j-config
+          mountPath: /opt/bitnami/spark/conf/log4j.properties
+          subPath: log4j.properties
+      volumes:
+      - name: log4j-config
+        configMap:
+          name: spark-log4j-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-ingestion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-ingestion
+  template:
+    metadata:
+      labels:
+        app: data-ingestion
+    spec:
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox:1.36
+        command: ["sh", "-c", "for i in {1..60}; do if nc -z kafka 9092; then echo 'Kafka ready'; exit 0; fi; echo 'Waiting for Kafka...'; sleep 5; done; echo 'Timeout waiting for Kafka'; exit 1"]
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+      containers:
+      - name: data-ingestion
+        image: fintech/data-ingestion:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        envFrom:
+        - secretRef:
+            name: finnhub-api-secret
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.2.2
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        - name: GF_INSTALL_PLUGINS
+          value: "hadesarchitect-cassandra-datasource"
+        volumeMounts:
+        - name: grafana-data
+          mountPath: /var/lib/grafana
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+      volumes:
+      - name: grafana-data
+        persistentVolumeClaim:
+          claimName: grafana-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streamlit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: streamlit
+  template:
+    metadata:
+      labels:
+        app: streamlit
+    spec:
+      containers:
+      - name: streamlit
+        image: fintech/streamlit:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8501
+        env:
+        - name: CASSANDRA_HOST
+          value: "cassandra"
+        - name: CASSANDRA_PORT
+          value: "9042"
+        - name: CASSANDRA_KEYSPACE
+          value: "fintech"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"

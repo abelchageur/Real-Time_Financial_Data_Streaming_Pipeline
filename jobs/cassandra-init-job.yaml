@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cassandra-init
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-cassandra
+        image: busybox:1.36
+        command: ["sh", "-c", "for i in {1..180}; do echo 'Attempt $i: Checking cassandra:9042'; if nc -zv cassandra 9042; then echo 'Cassandra ready'; exit 0; fi; echo 'Waiting for Cassandra...'; sleep 5; done; echo 'Timeout waiting for Cassandra'; exit 1"]
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+      containers:
+      - name: cassandra-init
+        image: cassandra:4.1
+        command: ["sh", "-c", "cqlsh -u cassandra -p cassandra -f /scripts/cassandra-setup.cql cassandra"]
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+        volumeMounts:
+        - name: cassandra-scripts
+          mountPath: /scripts
+      restartPolicy: OnFailure
+      volumes:
+      - name: cassandra-scripts
+        configMap:
+          name: cassandra-config
+          items:
+          - key: cassandra-setup.cql
+            path: cassandra-setup.cql

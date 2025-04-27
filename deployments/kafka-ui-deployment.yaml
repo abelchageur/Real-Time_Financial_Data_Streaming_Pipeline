@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox
+        command: ["sh", "-c", "for i in {1..60}; do if nc -z kafka 9092; then echo 'Kafka ready'; exit 0; fi; echo 'Waiting for Kafka...'; sleep 5; done; echo 'Timeout waiting for Kafka'; exit 1"]
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+      containers:
+      - name: kafka-ui
+        image: provectuslabs/kafka-ui:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_CLUSTERS_0_NAME
+          value: "fintech-cluster"
+        - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+          value: "kafka:9092"
+        - name: KAFKA_CLUSTERS_0_ZOOKEEPER
+          value: "zookeeper:2181"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"

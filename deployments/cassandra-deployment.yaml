@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cassandra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cassandra
+  template:
+    metadata:
+      labels:
+        app: cassandra
+    spec:
+      containers:
+      - name: cassandra
+        image: cassandra:4.1
+        ports:
+        - containerPort: 9042
+        env:
+        - name: CASSANDRA_CLUSTER_NAME
+          value: "fintech-cluster"
+        - name: CASSANDRA_DC
+          value: "DC1"
+        - name: CASSANDRA_RACK
+          value: "RAC1"
+        - name: CASSANDRA_ENDPOINT_SNITCH
+          value: "GossipingPropertyFileSnitch"
+        - name: JVM_OPTS
+          value: "-Xms1g -Xmx2g -Dcassandra.logback.configurationFile=/etc/cassandra/logback.xml"
+        livenessProbe:
+          tcpSocket:
+            port: 9042
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 9042
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+        volumeMounts:
+        - name: cassandra-data
+          mountPath: /var/lib/cassandra
+      volumes:
+      - name: cassandra-data
+        persistentVolumeClaim:
+          claimName: cassandra-data
